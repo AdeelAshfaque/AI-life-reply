@@ -122,33 +122,34 @@ async def generate_diary(db: AsyncIOMotorDatabase) -> DiaryEntry:
         diary = f"Today you moved through {', '.join(titles[:3])} and ended the day with {titles[-1]}."
     return DiaryEntry(date="Today", diary=diary, mood="balanced", summary=diary)
 
-
 async def search_memories(db: AsyncIOMotorDatabase, query: str) -> SearchResult:
-    normalized = query.lower()
-    if "football" in normalized:
+    matched = await db.memories.find(
+        {
+            "$or": [
+                {"title": {"$regex": query, "$options": "i"}},
+                {"description": {"$regex": query, "$options": "i"}},
+                {"tags": {"$regex": query, "$options": "i"}},
+                {"location": {"$regex": query, "$options": "i"}},
+                {"people": {"$regex": query, "$options": "i"}},
+            ]
+        }
+    ).to_list(length=10)
+
+    if not matched:
         return SearchResult(
             query=query,
-            answer="Last Saturday. IBA Ground. 6 PM.",
-            related_memories=["Football", "Sports Ground", "Ali", "University Tournament"],
-        )
-    if "ali" in normalized:
-        return SearchResult(
-            query=query,
-            answer="Ali appears in your university, library, and football memories.",
-            related_memories=["University", "Library", "Football", "University Tournament"],
-        )
-    if "library" in normalized:
-        return SearchResult(
-            query=query,
-            answer="You studied in the library today around 3 PM.",
-            related_memories=["Library", "University", "Diary", "Study Session"],
+            answer="No matching memories found.",
+            related_memories=[],
         )
 
-    matched = await db.memories.find({"$or": [{"title": {"$regex": query, "$options": "i"}}, {"description": {"$regex": query, "$options": "i"}}, {"tags": query}]}, {"title": 1}).to_list(length=5)
+    top = matched[0]
+    answer = f"{top.get('title', 'A memory')} — {top.get('description', '')} ({top.get('date', '')} at {top.get('time', '')}, {top.get('location', '')})."
+    related = [document.get("title", "") for document in matched if document.get("title")]
+
     return SearchResult(
         query=query,
-        answer="I found memories related to your question.",
-        related_memories=[document.get("title", "") for document in matched] or ["Breakfast", "Library", "Football"],
+        answer=answer,
+        related_memories=related,
     )
 
 
