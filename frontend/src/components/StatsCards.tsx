@@ -2,17 +2,16 @@
 import { useEffect, useState } from "react";
 import {
   Brain,
-  Trophy,
+  Images,
   Users,
   MapPin,
 } from "lucide-react";
 import { getWeeklyInsights } from "@/lib/api";
 type Insights = {
-  studied_days: number;
-  football_days: number;
-  university_days: number;
-  top_people: string[];
-  top_locations: string[];
+  total_memories: number;
+  total_tags: number;
+  total_people: number;
+  total_locations: number;
 };
 export default function StatsCards() {
   const [stats, setStats] = useState<Insights | null>(null);
@@ -21,29 +20,29 @@ export default function StatsCards() {
   }, []);
   const cards = [
     {
-      title: "Study Days",
-      value: stats?.studied_days ?? 0,
-      icon: Brain,
+      title: "Memories Saved",
+      value: stats?.total_memories ?? 0,
+      icon: Images,
       color: "text-indigo-400",
       bg: "bg-indigo-500/10",
     },
     {
-      title: "Football Days",
-      value: stats?.football_days ?? 0,
-      icon: Trophy,
+      title: "AI Tags",
+      value: stats?.total_tags ?? 0,
+      icon: Brain,
       color: "text-purple-400",
       bg: "bg-purple-500/10",
     },
     {
       title: "People Detected",
-      value: stats?.top_people?.length ?? 0,
+      value: stats?.total_people ?? 0,
       icon: Users,
       color: "text-sky-400",
       bg: "bg-sky-500/10",
     },
     {
       title: "Places Detected",
-      value: stats?.top_locations?.length ?? 0,
+      value: stats?.total_locations ?? 0,
       icon: MapPin,
       color: "text-emerald-400",
       bg: "bg-emerald-500/10",
