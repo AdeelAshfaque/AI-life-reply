@@ -32,7 +32,7 @@ const itemVariants = {
     filter: "blur(0px)",
     transition: { type: "spring", stiffness: 110, damping: 15 } 
   },
-};
+} as const;
 
 export default function DashboardPage() {
   const [activeSection, setActiveSection] = useState<Section>("dashboard");
@@ -140,3 +140,4 @@ export default function DashboardPage() {
     </main>
   );
 }
+

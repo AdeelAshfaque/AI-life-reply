@@ -22,7 +22,7 @@ const containerVariants = {
 const itemVariants = {
   hidden: { opacity: 0, y: 10, filter: "blur(4px)" },
   show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { type: "spring", stiffness: 120, damping: 18 } },
-};
+} as const;
 
 export default function DashboardPage() {
   const [activeSection, setActiveSection] = useState<Section>("dashboard");
