@@ -17,7 +17,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     { label: "Graph", icon: Share2, target: "graph" },
     { label: "Gallery", icon: Images, target: "gallery" },
     { label: "Settings", icon: Settings, target: "settings" },
-  ];
+  ] as const;
 
   return (
     <aside className="hidden md:flex w-64 flex-col border-r border-slate-800 bg-slate-950 px-4 py-6">
