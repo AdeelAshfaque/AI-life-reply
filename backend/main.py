@@ -12,12 +12,15 @@ app = FastAPI(title="AI Life Replay API", version="0.1.0")
 # Bulletproof local CORS policy for development
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="https?://.*",
+    allow_origins=[
+        "http://localhost:3000",
+        "https://ai-life-reply.vercel.app",
+    ],
+    allow_origin_regex=r"https://ai-life-reply.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # 👈 2. ADD THIS EXACT LINE HERE to auto-generate the folder and stop the crash!
 os.makedirs("uploads", exist_ok=True)
 
