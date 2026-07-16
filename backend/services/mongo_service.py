@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Any, Dict, List
-
+from services.ai_service import generate_ai_diary
+from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from models.schemas import DiaryEntry, SearchResult, TimelineItem, WeeklyInsights
+from models.schemas import DiaryEntry, TimelineItem, WeeklyInsights
 from models.mongo_models import memory_document_to_dict
 
 
@@ -75,25 +76,39 @@ async def ensure_seed_data(db: AsyncIOMotorDatabase) -> None:
             "created_at": datetime.utcnow(),
         },
     ]
+
     await memories.insert_many(seed_memories)
 
 
-async def add_memory(db: AsyncIOMotorDatabase, file_name: str) -> Dict[str, Any]:
-    title = file_name.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title()
+async def add_memory(
+    db: AsyncIOMotorDatabase,
+    title: str,
+    image_url: str,
+    public_id: str,
+    description: str,
+    tags: list[str] | None = None,
+    people: list[str] | None = None,
+    location: str = "",
+    mood: str = "",
+) -> Dict[str, Any]:
+
     document = {
-        "image_url": f"https://cdn.example.com/{file_name}",
+        "image_url": image_url,
+        "public_id": public_id,
         "title": title,
-        "description": f"Looks like you captured a meaningful moment in {title.lower()}.",
-        "date": "Today",
-        "time": "20:00",
-        "tags": ["memory", "timeline", "uploaded"],
-        "people": ["Ali"],
-        "location": "Unknown",
-        "mood": "reflective",
+        "description": description,
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "time": datetime.now().strftime("%H:%M"),
+        "tags": tags or [],
+        "people": people or [],
+        "location": location,
+        "mood": mood,
         "created_at": datetime.utcnow(),
     }
+
     result = await db.memories.insert_one(document)
     saved = await db.memories.find_one({"_id": result.inserted_id})
+
     return memory_document_to_dict(saved or document)
 
 
@@ -104,25 +119,29 @@ async def list_memories(db: AsyncIOMotorDatabase) -> List[Dict[str, Any]]:
 
 
 async def build_timeline(db: AsyncIOMotorDatabase) -> List[TimelineItem]:
-    cursor = db.memories.find({}).sort([("time", 1)])
+    cursor = db.memories.find({}).sort("created_at", -1)
     documents = await cursor.to_list(length=None)
+
     return [
-        TimelineItem(time=document.get("time", ""), title=document.get("title", ""), note=document.get("description", ""))
+        TimelineItem(
+            image_url=document.get("image_url", ""),
+            title=document.get("title", ""),
+            description=document.get("description", ""),
+            date=document.get("date", ""),
+            time=document.get("time", ""),
+            location=document.get("location", ""),
+            mood=document.get("mood", ""),
+        )
         for document in documents
-        if document.get("time")
     ]
 
 
-async def generate_diary(db: AsyncIOMotorDatabase) -> DiaryEntry:
-    cursor = db.memories.find({}).sort([("time", 1)])
-    documents = await cursor.to_list(length=None)
-    titles = [document.get("title", "") for document in documents if document.get("title")]
-    diary = f"Today you attended university, spent time studying in the library, played football, and ended your day watching the sunset."
-    if len(titles) >= 3:
-        diary = f"Today you moved through {', '.join(titles[:3])} and ended the day with {titles[-1]}."
-    return DiaryEntry(date="Today", diary=diary, mood="balanced", summary=diary)
+async def generate_diary(db: AsyncIOMotorDatabase):
+    memories = await db.memories.find({}).sort("created_at", 1).to_list(length=None)
 
-async def search_memories(db: AsyncIOMotorDatabase, query: str) -> SearchResult:
+    return await generate_ai_diary(memories)
+
+async def search_memories(db: AsyncIOMotorDatabase, query: str):
     matched = await db.memories.find(
         {
             "$or": [
@@ -135,59 +154,133 @@ async def search_memories(db: AsyncIOMotorDatabase, query: str) -> SearchResult:
         }
     ).to_list(length=10)
 
-    if not matched:
-        return SearchResult(
-            query=query,
-            answer="No matching memories found.",
-            related_memories=[],
+    return matched
+
+
+async def build_memory_graph(
+    db: AsyncIOMotorDatabase,
+    focus: str,
+):
+    """
+    Builds a growing memory graph centered on `focus`.
+
+    Key fix vs the old version: `focus` is only linked to a memory when the
+    focus person actually appears in that memory's `people` list (or is the
+    memory's title/location/tag, in case someone searches a place or theme
+    instead of a person). Previously every memory was force-linked to focus,
+    which produced misleading connections.
+    """
+    memories = await db.memories.find({}).to_list(length=None)
+
+    nodes = []
+    edges = []
+    added = set()
+
+    def add_node(node_id: str, label: str, node_type: str, size: int):
+        if not node_id or node_id in added:
+            return
+        nodes.append({
+            "id": node_id,
+            "label": label,
+            "type": node_type,
+            "size": size,
+        })
+        added.add(node_id)
+
+    def add_edge(source: str, target: str):
+        if not source or not target or source == target:
+            return
+        edges.append({"source": source, "target": target})
+
+    add_node(focus, focus, "focus", 24)
+
+    for memory in memories:
+        title = memory.get("title", "")
+        location = memory.get("location", "")
+        mood = memory.get("mood", "")
+        tags = memory.get("tags", [])
+        people = memory.get("people", [])
+
+        if not title:
+            continue
+
+        # Does this memory actually relate to the focus?
+        is_relevant_to_focus = (
+            focus in people
+            or focus == location
+            or focus == title
+            or focus in tags
         )
 
-    top = matched[0]
-    answer = f"{top.get('title', 'A memory')} — {top.get('description', '')} ({top.get('date', '')} at {top.get('time', '')}, {top.get('location', '')})."
-    related = [document.get("title", "") for document in matched if document.get("title")]
+        add_node(title, title, "memory", 18)
 
-    return SearchResult(
-        query=query,
-        answer=answer,
-        related_memories=related,
-    )
+        if is_relevant_to_focus:
+            add_edge(focus, title)
 
+        if location:
+            add_node(location, location, "place", 15)
+            add_edge(title, location)
 
-async def build_memory_graph(db: AsyncIOMotorDatabase, focus: str) -> Dict[str, List[Dict[str, str]]]:
-    cursor = db.memories.find({"$or": [{"people": focus}, {"title": {"$regex": focus, "$options": "i"}}]})
-    documents = await cursor.to_list(length=10)
-    related_titles = [document.get("title", "") for document in documents if document.get("title")]
-    if not related_titles:
-        related_titles = ["Sports Ground", "Ali", "University Tournament", "Winning Medal"]
-    nodes = [focus, *related_titles[:4]]
-    edges = []
-    for index in range(len(nodes) - 1):
-        edges.append({"source": nodes[index], "target": nodes[index + 1]})
-    return {"nodes": nodes, "edges": edges}
+        if mood:
+            add_node(mood, mood, "mood", 13)
+            add_edge(title, mood)
+
+        for person in people:
+            add_node(person, person, "person", 16)
+            add_edge(title, person)
+
+        for tag in tags:
+            add_node(tag, tag, "tag", 12)
+            add_edge(title, tag)
+
+    return {
+        "focus": focus,
+        "nodes": nodes,
+        "edges": edges,
+    }
 
 
 async def build_weekly_insights(db: AsyncIOMotorDatabase) -> WeeklyInsights:
     memories = await db.memories.find({}).to_list(length=None)
-    studied_days = sum(1 for memory in memories if any(tag in ["study", "library", "campus"] for tag in memory.get("tags", [])))
-    football_days = sum(1 for memory in memories if "football" in [tag.lower() for tag in memory.get("tags", [])] or memory.get("title", "").lower() == "football")
-    university_days = sum(1 for memory in memories if "university" in memory.get("title", "").lower() or "campus" in [tag.lower() for tag in memory.get("tags", [])])
 
-    people_counter: Dict[str, int] = {}
-    location_counter: Dict[str, int] = {}
+    tags = set()
+    people = set()
+    locations = set()
+
     for memory in memories:
-        for person in memory.get("people", []) or []:
-            people_counter[person] = people_counter.get(person, 0) + 1
-        location = memory.get("location")
-        if location:
-            location_counter[location] = location_counter.get(location, 0) + 1
 
-    top_people = [name for name, _ in sorted(people_counter.items(), key=lambda item: item[1], reverse=True)[:3]]
-    top_locations = [name for name, _ in sorted(location_counter.items(), key=lambda item: item[1], reverse=True)[:3]]
+        for tag in memory.get("tags", []):
+            if tag:
+                tags.add(tag)
+
+        for person in memory.get("people", []):
+            if person:
+                people.add(person)
+
+        if memory.get("location"):
+            locations.add(memory["location"])
 
     return WeeklyInsights(
-        studied_days=studied_days,
-        football_days=football_days,
-        university_days=university_days,
-        top_people=top_people,
-        top_locations=top_locations,
+        total_memories=len(memories),
+        total_tags=len(tags),
+        total_people=len(people),
+        total_locations=len(locations),
     )
+
+async def delete_memory(
+    db: AsyncIOMotorDatabase,
+    memory_id: str,
+) -> Dict[str, Any] | None:
+
+    memory = await db.memories.find_one(
+        {"_id": ObjectId(memory_id)}
+    )
+
+    if not memory:
+        return None
+
+    await db.memories.delete_one(
+        {"_id": ObjectId(memory_id)}
+    )
+
+    return memory_document_to_dict(memory)

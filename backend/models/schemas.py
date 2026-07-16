@@ -22,9 +22,13 @@ class MemoryItem(BaseModel):
 
 
 class TimelineItem(BaseModel):
-    time: str
+    image_url: str
     title: str
-    note: str
+    description: str
+    date: str
+    time: str
+    location: str
+    mood: str
 
 
 class SearchResult(BaseModel):
@@ -38,14 +42,11 @@ class MemoryGraphResponse(BaseModel):
     nodes: List[str]
     edges: List[dict]
 
-
 class WeeklyInsights(BaseModel):
-    studied_days: int
-    football_days: int
-    university_days: int
-    top_people: List[str]
-    top_locations: List[str]
-
+    total_memories: int
+    total_tags: int
+    total_people: int
+    total_locations: int
 
 class DiaryEntry(BaseModel):
     date: str

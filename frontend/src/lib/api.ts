@@ -1,18 +1,22 @@
+
 export type MemoryItem = {
+  id: string;
   image_url: string;
   title: string;
   description: string;
   date: string;
-  time?: string | null;
+  time: string;
   tags: string[];
-  people?: string[] | null;
-  location?: string | null;
-  mood?: string | null;
+  people: string[];
+  location: string;
+  mood: string;
 };
+
+
 
 export type TimelineItem = {
   time: string;
-  title: string;
+  title: string; 
   note: string;
 };
 
@@ -29,11 +33,23 @@ export type SearchResult = {
   related_memories: string[];
 };
 
-export type GraphResponse = {
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: "focus" | "memory" | "person" | "place" | "tag" | "mood";
+  size: number;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+}
+
+export interface GraphResponse {
   focus: string;
-  nodes: string[];
-  edges: Array<{ source: string; target: string }>;
-};
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://192.168.100.5:8000";
 async function requestJson<T>(path: string): Promise<T> {
@@ -87,13 +103,22 @@ export async function uploadMemory(file: File) {
     throw new Error(`Upload failed: ${response.status}`);
   }
 
-  return response.json() as Promise<{
-    image_url: string;
-    title: string;
-    description: string;
-    tags: string[];
-    people: string[];
-    location: string;
-    mood: string;
+  return response.json() as Promise<MemoryItem & {
+  id: string;
+  created_at: string;
   }>;
 }
+
+export async function deleteMemory(id: string) {
+  const response = await fetch(`http://localhost:8000/memories/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to delete memory");
+  }
+
+  return response.json();
+}
+
+
