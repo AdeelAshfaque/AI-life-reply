@@ -81,7 +81,7 @@ export async function getGraph(focus = "Ali") {
 }
 
 export async function getWeeklyInsights() {
-  return requestJson<{ studied_days: number; football_days: number; university_days: number; top_people: string[]; top_locations: string[] }>(
+  return requestJson<{ total_memories: number; total_tags: number; total_people: number; total_locations: number }>(
     "/graph/weekly-insights",
   );
 }
@@ -120,5 +120,6 @@ export async function deleteMemory(id: string) {
 
   return response.json();
 }
+
 
 
