@@ -2,7 +2,14 @@
 
 import { LayoutDashboard, Search, BookOpen, Share2, Images, Settings } from "lucide-react";
 
-export default function Sidebar({ activeSection, onNavigate }) {
+type Section = "dashboard" | "search" | "diary" | "graph" | "gallery" | "settings";
+
+type SidebarProps = {
+  activeSection: Section;
+  onNavigate: (section: Section) => void;
+};
+
+export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   const navItems = [
     { label: "Dashboard", icon: LayoutDashboard, target: "dashboard" },
     { label: "Search", icon: Search, target: "search" },
